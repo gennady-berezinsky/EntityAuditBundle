@@ -344,7 +344,7 @@ class LogRevisionsListener implements EventSubscriber
      *
      * @return array<string, mixed>
      */
-    private function getManyToManyRelations(EntityManagerInterface $em, object $entity): array
+    public function getManyToManyRelations(EntityManagerInterface $em, object $entity): array
     {
         $data = [];
         $class = $em->getClassMetadata($entity::class);
