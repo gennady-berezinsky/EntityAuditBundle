@@ -195,7 +195,7 @@ class LogRevisionsListener implements EventSubscriber
                 $sql .= ' AND '.$columnName.' = ?';
             }
 
-            $em->getConnection()->executeQuery($sql, $params, $types);
+            $this->persistAuditStatement($conn, $sql, $params, $types);
         }
 
         foreach ($this->deferredChangedManyToManyEntityRevisionsToPersist as $deferredChangedManyToManyEntityRevisionToPersist) {
@@ -619,7 +619,33 @@ class LogRevisionsListener implements EventSubscriber
             }
         }
 
-        $conn->executeStatement($this->getInsertRevisionSQL($em, $class), $params, $types);
+        $this->persistAuditRow($conn, $this->getInsertRevisionSQL($em, $class), $params, $types);
+    }
+
+    /**
+     * SPIKE PATCH (Precoro fork, not upstream): extension point so subclasses can defer the
+     * actual INSERT instead of writing it synchronously inside the current flush's transaction.
+     * Default behaviour is unchanged.
+     *
+     * @param array<int, mixed>  $params
+     * @param array<int, mixed>  $types
+     */
+    protected function persistAuditRow(Connection $conn, string $sql, array $params, array $types): void
+    {
+        $conn->executeStatement($sql, $params, $types);
+    }
+
+    /**
+     * SPIKE PATCH (Precoro fork, not upstream): extension point for the extraUpdates
+     * follow-up UPDATE (corrects columns only resolvable after the main flush, e.g. FK ids
+     * assigned post-insert) so subclasses can defer it too. Default behaviour is unchanged.
+     *
+     * @param array<int, mixed> $params
+     * @param array<int, mixed> $types
+     */
+    protected function persistAuditStatement(Connection $conn, string $sql, array $params, array $types): void
+    {
+        $conn->executeQuery($sql, $params, $types);
     }
 
     /**
@@ -652,7 +678,8 @@ class LogRevisionsListener implements EventSubscriber
             $joinTableParams[] = $reflField->getValue($relatedEntity);
             $joinTableTypes[] = PersisterHelper::getTypeOfColumn($targetColumn, $targetClass, $em);
         }
-        $conn->executeStatement(
+        $this->persistAuditRow(
+            $conn,
             $this->getInsertJoinTableRevisionSQL($class, $targetClass, $assoc),
             $joinTableParams,
             $joinTableTypes
